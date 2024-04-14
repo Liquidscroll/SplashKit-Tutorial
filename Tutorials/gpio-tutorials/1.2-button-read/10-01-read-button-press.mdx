@@ -1,0 +1,204 @@
+---
+title: SplashKit GPIO - Reading Button Presses
+description: test
+category: Guides
+author: Jonathan Tynan
+lastupdated: Apr 22 2024
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside } from '@astrojs/starlight/components';
+
+{frontmatter.description}
+
+Written by {frontmatter.author} on {frontmatter.lastupdated}
+
+:::caution[Before you begin.]
+When working with Raspberry Pi GPIO pins, it's crucial to handle the setup and cleanup processes carefully.
+
+- Always ensure that the GPIO pins are properly initialised before use and cleaned up afterwards to prevent any damage to your Raspberry Pi
+- Be mindful of static electricity which can pose a serious risk to the sensitive electronic components on the board
+- Before touching the Raspberry Pi or any connected components, ground yourself to eliminate any static charge that may have accumulated.
+
+These precautions will help to protect your device from potential harm caused by electrostatic discharges.
+:::
+
+
+
+In this guide, we'll explore how to use the GPIO pins on a Raspberry Pi to read button presses. This ability is crucial for projects involving user input,
+like interactive installations or simple controls for robotics. We'll cover the basics of setting up a simple circuit with a button, how to use the SplashKit library to
+detect the button press and briefly introduce more advanced topics like debouncing and managing floating pins.
+
+
+### Components
+#### Breadboard
+Breadboards are invaluable for testing and building circuits without the need for soldering. Arranged in rows and columns of holes, each row internally connected, they make setting up your electronic components easy.
+
+<img
+  alt="Breadboard with internal connections highlighted"
+  src="/images/articles/gpio/components/breadboard_highlighted.png"
+></img>
+
+#### Push Button
+A push button allows electricity to flow between its two contacts by physically moving strips of metal together when pressed. This connects the circuit and provides power to our input pin.
+This pushbutton has four pins and each diagonal pin is paired with each other. It's a simple switch mechanism which we can detect and use.
+
+<img
+  alt="Breadboard with internal connections highlighted"
+  src="/images/articles/gpio/components/pushbutton.png"
+></img>
+
+#### Jumper Wires
+Jumper wires will connect our components on the breadboard to the Raspberry Pi. We will use M/F jumper wires for this setup.
+
+[placeholder for image of jumper wires]
+
+### The Circuit
+<img
+  alt="Circuit Diagram for reading a button press"
+  src="/images/articles/gpio/circuits/buttonpush.png"
+></img>
+
+<img
+  alt="Photograph of circuit for reading a button press"
+  src="/images/articles/gpio/circuits/push_button_circuit.jpg"
+></img>
+
+### The Code
+<Tabs>
+    <TabItem label="C++">
+    ```cpp
+    #include <splashkit.h>
+
+    int main()
+    {
+        raspi_init();
+
+        pins button_pin = PIN_29;
+        pins led_pin = PIN_11;
+        pin_values led_state = GPIO_LOW;
+
+        raspi_set_mode(led_pin, GPIO_INPUT);
+        raspi_set_mode(led_pin, GPIO_OUTPUT);
+
+        raspi_set_pull_up_down(button_pin, PUD_DOWN);
+
+        timer run_timer = create_timer("run_timer");
+        start_timer(run_timer);
+        while(timer_ticks(run_timer) < 30000)
+        {
+            if(raspi_read(button_pin) == GPIO_HIGH)
+            {
+                led_state = raspi_read(led_pin);
+                if(led_state == GPIO_LOW)
+                {
+                    raspi_write(led_pin, GPIO_HIGH);
+                }
+                else
+                {
+                    raspi_write(led_pin, GPIO_LOW);
+                }
+            }
+        }
+
+        stop_timer(run_timer);
+        free_all_timers();
+        raspi_cleanup();
+        return 0;
+    }
+    ```
+    </TabItem>
+
+    <TabItem label="C#">
+    ```csharp
+    using SplashKitSDK;
+    namespace ButtonProgram
+    {
+        public class Program
+        {
+            public static void Main()
+            {
+                SplashKit.RaspiInit();
+                SplashKitSDK.Pins button_pin = (SplashKitSDK.Pins)29;
+                SplashKitSDK.Pins led_pin = (SplashKitSDK.Pins)11;
+                SplashKitSDK.PinValues led_state = (SplashKitSDK.PinValues) 0;
+
+                SplashKit.RaspiSetMode(button_pin, (SplashKitSDK.PinModes) 0);
+                SplashKit.RaspiSetMode(led_pin, (SplashKitSDK.PinModes) 1);
+
+                SplashKit.RaspiSetPullUpDown(button_pin, (SplashKitSDK.PullUpDown) 1);
+
+                var run_timer = SplashKit.CreateTimer("run_timer");
+                SplashKit.StartTimer(run_timer);
+
+                while(SplashKit.TimerTicks(run_timer) < 30000)
+                {
+                    if(SplashKit.RaspiRead(button_pin) == (SplashKitSDK.PinValues) 1)
+                    {
+                        led_state = SplashKit.RaspiRead(led_pin);
+                        if(led_state == (SplashKitSDK.PinValues) 0)
+                        {
+                            SplashKit.RaspiWrite(led_pin, (SplashKitSDK.PinValues) 1);
+                        }
+                        else
+                        {
+                            SplashKit.RaspiWrite(led_pin, (SplashKitSDK.PinValues) 0);
+                        }
+                    }
+                }
+                SplashKit.StopTimer(run_timer);
+                SplashKit.FreeAllTimers();
+                SplashKit.RaspiCleanup();
+            }
+        }
+    }
+    ```
+    </TabItem>
+
+</Tabs>
+
+We start and end the code by calling [`raspi_init()`](/api/raspberry/raspi_init.html) and [`raspi_cleanup()`](/api/raspberry/raspi_cleanup.html) respectively. These functions initialize and clean up the GPIO pins for use in our program.
+Then we define the pins we will use for the button and LED. We then set the button pin to use a pull-down resistor using [`raspi_set_pull_up_down()`](/api/raspberry/raspi_set_pull_up_down.html).
+Without doing this the pin is 'floating', meaning it is susceptible to random electrical noise and interference. We set the Raspberry Pis internal pull-down resistor to ensure that the pin reads a stable low when the button is not pressed and avoiding false triggers cause by this random electrical noise.
+
+Then we enter a loop that will run until any key is pressed. Inside the loop, we'll check if the button is pressed using [`raspi_read()`](/api/raspberry/raspi_read.html) and when it is we then read the current state of the LED pin. We then use this state to
+then toggle the LED on or off wuth [`raspi_write()`](/api/raspberry/raspi_write.html).
+
+We can build this program with the following command:
+
+<Tabs>
+    <TabItem label="C++">
+    ```bash
+    g++ button_press.cpp -lSplashKit -o led_blink
+    ```
+    </TabItem>
+
+    <TabItem label="C#">
+    ```bash
+    dotnet build
+    ```
+    </TabItem>
+
+</Tabs>
+
+We can then run the program with the following command:
+
+<Tabs>
+    <TabItem label="C++">
+    ```bash
+    ./button_press
+    ```
+    </TabItem>
+
+    <TabItem label="C#">
+    ```bash
+    dotnet run
+    ```
+    </TabItem>
+
+</Tabs>
+
+<img
+  alt="GIF of the button press circuit in action."
+  src="/images/articles/gpio/circuits/push_button.gif"
+></img>
